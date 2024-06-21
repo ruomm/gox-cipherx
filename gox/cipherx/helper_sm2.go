@@ -59,6 +59,14 @@ type Sm2Helper interface {
 	EncryptAsn1String(encodeMode MODE_ENCODE, origStr string) (string, error)
 	// 使用私钥进行SM2解密-字符串模式
 	DecryptAsn1String(encodeMode MODE_ENCODE, encStr string) (string, error)
+	// 使用私钥进行签名-字节数组模式
+	Sm2Sign(origMsg []byte, uid []byte) ([]byte, error)
+	// 使用公钥验证签名-字节数组模式
+	Sm2Verify(origMsg []byte, uid []byte, sign []byte) (bool, error)
+	// 使用私钥进行签名-字节串模式
+	Sm2SignString(encodeMode MODE_ENCODE, origMsg string, uid []byte) (string, error)
+	// 使用公钥验证签名-字节串模式
+	Sm2VerifyString(encodeMode MODE_ENCODE, origMsg string, uid []byte, sigStr string) (bool, error)
 }
 
 func Sm2KeyStringToByte(keyMode MODE_KEY, keyStr string) ([]byte, error) {

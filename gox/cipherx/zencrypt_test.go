@@ -70,32 +70,41 @@ func TestGuomiSm2Common(t *testing.T) {
 	var PWD []byte = []byte("123456")
 	//var PWD []byte = nil
 	//time, _ := TimeParseByString(TIME_PATTERN_STANDARD, "2023-01-01 00:50:11")
-	var xguomi Sm2Helper
-	xguomi = &XGuomi{
+	var xHelper Sm2Helper
+	xHelper = &XGuomi{
 		ModePadding: MODE_PADDING_PKCS5,
 	}
-	xguomi.GenrateKeyPair()
-	pubKey, _ := xguomi.FormatPublicKey(MODE_KEY_BASE64)
-	priKey, _ := xguomi.FormatPrivateKey(MODE_KEY_BASE64, PWD)
+	xHelper.GenrateKeyPair()
+	pubKey, _ := xHelper.FormatPublicKey(MODE_KEY_BASE64)
+	priKey, _ := xHelper.FormatPrivateKey(MODE_KEY_BASE64, PWD)
 
 	fmt.Println(pubKey)
 	fmt.Println(priKey)
-	err := xguomi.LoadPulicKey(MODE_KEY_BASE64, pubKey)
+	err := xHelper.LoadPulicKey(MODE_KEY_BASE64, pubKey)
 	fmt.Println(err)
-	err = xguomi.LoadPrivateKey(MODE_KEY_BASE64, priKey, PWD)
+	err = xHelper.LoadPrivateKey(MODE_KEY_BASE64, priKey, PWD)
 	fmt.Println(err)
 	origStr := generateToken(10240) + "      中华人民共和国      "
-	origStr = ""
-	//encStr, _ := xguomi.EncryptString(MODE_ENCODE_BASE64, origStr, true)
-	encStr, _ := xguomi.EncryptAsn1String(MODE_ENCODE_BASE64, origStr)
+	//origStr = "a"
+	//encStr, _ := xHelper.EncryptString(MODE_ENCODE_BASE64, origStr, true)
+	encStr, _ := xHelper.EncryptAsn1String(MODE_ENCODE_BASE64, origStr)
 	fmt.Println(encStr)
-	//decStr, _ := xguomi.DecryptString(MODE_ENCODE_BASE64, encStr, true)
-	decStr, _ := xguomi.DecryptAsn1String(MODE_ENCODE_BASE64, encStr)
+	//decStr, _ := xHelper.DecryptString(MODE_ENCODE_BASE64, encStr, true)
+	decStr, _ := xHelper.DecryptAsn1String(MODE_ENCODE_BASE64, encStr)
 	fmt.Println(decStr)
 	if origStr == decStr {
 		fmt.Println("加密解密验证通过")
 	} else {
 		fmt.Println("加密解密验证不通过通过")
+	}
+
+	sigStr, _ := xHelper.Sm2SignString(MODE_ENCODE_HEX_LOWER, origStr, PWD)
+	fmt.Println(sigStr)
+	_, verifyErr := xHelper.Sm2VerifyString(MODE_ENCODE_HEX_LOWER, origStr, PWD, sigStr)
+	if verifyErr == nil && len(sigStr) > 0 {
+		fmt.Println("签名验证通过")
+	} else {
+		fmt.Printf("签名验证不通过:%v", verifyErr)
 	}
 
 }

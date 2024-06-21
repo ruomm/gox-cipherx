@@ -8,20 +8,21 @@ package cipherx
 
 import (
 	"crypto/rand"
+	"encoding/asn1"
 	"errors"
 	"github.com/tjfoc/gmsm/x509"
+	"math/big"
 
 	"github.com/tjfoc/gmsm/sm2"
 )
 
 type SM2_MODE int
 
-const (
-	SM2_C1C3C2 SM2_MODE = 0
-	SM2_C1C2C3 SM2_MODE = 1
-)
+type sm2Signature struct {
+	R, S *big.Int
+}
 
-type XGuomi struct {
+type XSm2 struct {
 	ModePadding     MODE_PADDING
 	SizeOfKey       int
 	SizeAuto        bool
@@ -32,12 +33,12 @@ type XGuomi struct {
 }
 
 // key模式
-//func (x *XGuomi) ModeOfKey() MODE_KEY {
+//func (x *XSm2) ModeOfKey() MODE_KEY {
 //	return ParseKeyMode(x.ModeKey)
 //}
 
 // 生成秘钥对
-func (x *XGuomi) GenrateKeyPair() error {
+func (x *XSm2) GenrateKeyPair() error {
 	priKey, err := sm2.GenerateKey(rand.Reader)
 	if err != nil {
 		return err
@@ -48,19 +49,19 @@ func (x *XGuomi) GenrateKeyPair() error {
 }
 
 // 获取SM2秘钥对
-func (x *XGuomi) KeyPair() (*sm2.PrivateKey, *sm2.PublicKey) {
+func (x *XSm2) KeyPair() (*sm2.PrivateKey, *sm2.PublicKey) {
 	return x.PrivateKey, x.PublicKey
 }
 
 // 设置秘钥长度
-func (x *XGuomi) SetSizeOfKey(sizeOfKey int) {
+func (x *XSm2) SetSizeOfKey(sizeOfKey int) {
 	if sizeOfKey%8 == 0 {
 		x.SizeOfKey = sizeOfKey
 	}
 }
 
 // 获取秘钥长度
-func (x *XGuomi) GetSizeOfKey() int {
+func (x *XSm2) GetSizeOfKey() int {
 	if x.SizeOfKey > 0 && x.SizeOfKey%8 == 0 {
 		return x.SizeOfKey
 	} else {
@@ -69,7 +70,7 @@ func (x *XGuomi) GetSizeOfKey() int {
 }
 
 // 公钥长度
-func (x *XGuomi) SizeOfPublicKey() int {
+func (x *XSm2) SizeOfPublicKey() int {
 	if x.SizeOfKey > 0 && x.SizeOfKey%8 == 0 {
 		return x.SizeOfKey
 	} else {
@@ -78,7 +79,7 @@ func (x *XGuomi) SizeOfPublicKey() int {
 }
 
 // 秘钥长度
-func (x *XGuomi) SizeOfPrivateKey() int {
+func (x *XSm2) SizeOfPrivateKey() int {
 	if x.SizeOfKey > 0 && x.SizeOfKey%8 == 0 {
 		return x.SizeOfKey
 	} else {
@@ -87,17 +88,17 @@ func (x *XGuomi) SizeOfPrivateKey() int {
 }
 
 // 字节转字符串编码方案
-//func (x *XGuomi) ModeOfEncode() MODE_ENCODE {
+//func (x *XSm2) ModeOfEncode() MODE_ENCODE {
 //	return ParseEncodeMode(x.ModeEncode)
 //}
 
 // Padding的模式
-func (x *XGuomi) ModeOfPadding() MODE_PADDING {
+func (x *XSm2) ModeOfPadding() MODE_PADDING {
 	return ParsePaddingMode(x.ModePadding)
 }
 
 // 设置公钥
-func (x *XGuomi) SetPubicKey(pubKey []byte) error {
+func (x *XSm2) SetPubicKey(pubKey []byte) error {
 	parsePub, err := x509.ParseSm2PublicKey(pubKey)
 	if err != nil {
 		return err
@@ -107,7 +108,7 @@ func (x *XGuomi) SetPubicKey(pubKey []byte) error {
 }
 
 // 设置私钥
-func (x *XGuomi) SetPrivateKey(priKey []byte) error {
+func (x *XSm2) SetPrivateKey(priKey []byte) error {
 	parsePri, err := x509.ParseSm2PrivateKey(priKey)
 	if err != nil {
 		return err
@@ -117,7 +118,7 @@ func (x *XGuomi) SetPrivateKey(priKey []byte) error {
 }
 
 // 加载公钥
-func (x *XGuomi) LoadPulicKey(modeOfKey MODE_KEY, pubKeyStr string) error {
+func (x *XSm2) LoadPulicKey(modeOfKey MODE_KEY, pubKeyStr string) error {
 	keyByte, err := Sm2KeyStringToByte(ParseKeyMode(modeOfKey), pubKeyStr)
 	if err != nil {
 		return err
@@ -131,7 +132,7 @@ func (x *XGuomi) LoadPulicKey(modeOfKey MODE_KEY, pubKeyStr string) error {
 }
 
 // 加载私钥
-func (x *XGuomi) LoadPrivateKey(modeOfKey MODE_KEY, priKeyStr string, pwd []byte) error {
+func (x *XSm2) LoadPrivateKey(modeOfKey MODE_KEY, priKeyStr string, pwd []byte) error {
 	keyByte, err := Sm2KeyStringToByte(ParseKeyMode(modeOfKey), priKeyStr)
 	if err != nil {
 		return err
@@ -145,7 +146,7 @@ func (x *XGuomi) LoadPrivateKey(modeOfKey MODE_KEY, priKeyStr string, pwd []byte
 }
 
 // 格式化公钥
-func (x *XGuomi) FormatPublicKey(modeOfKey MODE_KEY) (string, error) {
+func (x *XSm2) FormatPublicKey(modeOfKey MODE_KEY) (string, error) {
 	keyData, err := x509.MarshalSm2PublicKey(x.PublicKey)
 	if err != nil {
 		return "", err
@@ -154,7 +155,7 @@ func (x *XGuomi) FormatPublicKey(modeOfKey MODE_KEY) (string, error) {
 }
 
 // 格式化私钥
-func (x *XGuomi) FormatPrivateKey(modeOfKey MODE_KEY, pwd []byte) (string, error) {
+func (x *XSm2) FormatPrivateKey(modeOfKey MODE_KEY, pwd []byte) (string, error) {
 	keyData, err := x509.MarshalSm2PrivateKey(x.PrivateKey, pwd)
 	if err != nil {
 		return "", err
@@ -163,9 +164,9 @@ func (x *XGuomi) FormatPrivateKey(modeOfKey MODE_KEY, pwd []byte) (string, error
 }
 
 // 使用公钥进行SM2加密-字节模式
-func (x *XGuomi) Encrypt(origMsg []byte, c1c2c3Mode bool) ([]byte, error) {
+func (x *XSm2) Encrypt(origMsg []byte, c1c2c3Mode bool) ([]byte, error) {
 	if nil == x.PublicKey {
-		return nil, errors.New("XGuomi.PublicKey is nil")
+		return nil, errors.New("XSm2.PublicKey is nil")
 	}
 	if nil == origMsg || len(origMsg) <= 0 {
 		return nil, errors.New("origMsg is nil or empty")
@@ -175,9 +176,9 @@ func (x *XGuomi) Encrypt(origMsg []byte, c1c2c3Mode bool) ([]byte, error) {
 }
 
 // 使用私钥进行SM2解密-字节模式
-func (x *XGuomi) Decrypt(encMsg []byte, c1c2c3Mode bool) ([]byte, error) {
+func (x *XSm2) Decrypt(encMsg []byte, c1c2c3Mode bool) ([]byte, error) {
 	if nil == x.PrivateKey {
-		return nil, errors.New("XGuomi.PrivateKey is nil")
+		return nil, errors.New("XSm2.PrivateKey is nil")
 	}
 	if nil == encMsg || len(encMsg) <= 0 {
 		return nil, errors.New("encMsg is nil or empty")
@@ -187,9 +188,9 @@ func (x *XGuomi) Decrypt(encMsg []byte, c1c2c3Mode bool) ([]byte, error) {
 }
 
 // 使用公钥进行SM2加密-字节模式
-func (x *XGuomi) EncryptAsn1(origMsg []byte) ([]byte, error) {
+func (x *XSm2) EncryptAsn1(origMsg []byte) ([]byte, error) {
 	if nil == x.PublicKey {
-		return nil, errors.New("XGuomi.PublicKey is nil")
+		return nil, errors.New("XSm2.PublicKey is nil")
 	}
 	if nil == origMsg || len(origMsg) <= 0 {
 		return nil, errors.New("origMsg is nil or empty")
@@ -198,9 +199,9 @@ func (x *XGuomi) EncryptAsn1(origMsg []byte) ([]byte, error) {
 }
 
 // 使用私钥进行SM2解密-字节模式
-func (x *XGuomi) DecryptAsn1(encMsg []byte) ([]byte, error) {
+func (x *XSm2) DecryptAsn1(encMsg []byte) ([]byte, error) {
 	if nil == x.PrivateKey {
-		return nil, errors.New("XGuomi.PrivateKey is nil")
+		return nil, errors.New("XSm2.PrivateKey is nil")
 	}
 	if nil == encMsg || len(encMsg) <= 0 {
 		return nil, errors.New("encMsg is nil or empty")
@@ -209,7 +210,7 @@ func (x *XGuomi) DecryptAsn1(encMsg []byte) ([]byte, error) {
 }
 
 // 使用公钥进行SM2加密-字符串模式
-func (x *XGuomi) EncryptString(encodeMode MODE_ENCODE, origStr string, c1c2c3Mode bool) (string, error) {
+func (x *XSm2) EncryptString(encodeMode MODE_ENCODE, origStr string, c1c2c3Mode bool) (string, error) {
 	encMsg, err := x.Encrypt([]byte(origStr), c1c2c3Mode)
 	if nil != err {
 		return "", err
@@ -218,7 +219,7 @@ func (x *XGuomi) EncryptString(encodeMode MODE_ENCODE, origStr string, c1c2c3Mod
 }
 
 // 使用私钥进行SM2解密-字符串模式
-func (x *XGuomi) DecryptString(encodeMode MODE_ENCODE, encStr string, c1c2c3Mode bool) (string, error) {
+func (x *XSm2) DecryptString(encodeMode MODE_ENCODE, encStr string, c1c2c3Mode bool) (string, error) {
 	encMsg, err := DecodingToByte(encodeMode, encStr)
 	if nil != err {
 		return "", err
@@ -231,7 +232,7 @@ func (x *XGuomi) DecryptString(encodeMode MODE_ENCODE, encStr string, c1c2c3Mode
 }
 
 // 使用公钥进行SM2加密-字符串模式
-func (x *XGuomi) EncryptAsn1String(encodeMode MODE_ENCODE, origStr string) (string, error) {
+func (x *XSm2) EncryptAsn1String(encodeMode MODE_ENCODE, origStr string) (string, error) {
 	encMsg, err := x.EncryptAsn1([]byte(origStr))
 	if nil != err {
 		return "", err
@@ -240,7 +241,7 @@ func (x *XGuomi) EncryptAsn1String(encodeMode MODE_ENCODE, origStr string) (stri
 }
 
 // 使用私钥进行SM2解密-字符串模式
-func (x *XGuomi) DecryptAsn1String(encodeMode MODE_ENCODE, encStr string) (string, error) {
+func (x *XSm2) DecryptAsn1String(encodeMode MODE_ENCODE, encStr string) (string, error) {
 	encMsg, err := DecodingToByte(encodeMode, encStr)
 	if nil != err {
 		return "", err
@@ -250,6 +251,60 @@ func (x *XGuomi) DecryptAsn1String(encodeMode MODE_ENCODE, encStr string) (strin
 		return "", err
 	}
 	return string(decMsg), nil
+}
+
+// 使用私钥进行签名-字节数组模式
+func (x *XSm2) Sm2Sign(origMsg []byte, uid []byte) ([]byte, error) {
+	if nil == x.PrivateKey {
+		return nil, errors.New("XSm2.PrivateKey is nil")
+	}
+	if nil == origMsg || len(origMsg) <= 0 {
+		return nil, errors.New("origMsg is nil or empty")
+	}
+	r, s, err := sm2.Sm2Sign(x.PrivateKey, origMsg, uid, rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	return asn1.Marshal(sm2Signature{r, s})
+}
+
+// 使用公钥验证签名-字节数组模式
+func (x *XSm2) Sm2Verify(origMsg []byte, uid []byte, sign []byte) (bool, error) {
+	if nil == x.PublicKey {
+		return false, errors.New("XSm2.PublicKey is nil")
+	}
+	if nil == origMsg || len(origMsg) <= 0 {
+		return false, errors.New("origMsg is nil or empty")
+	}
+	var sm2Sign sm2Signature
+	_, err := asn1.Unmarshal(sign, &sm2Sign)
+	if err != nil {
+		return false, err
+	}
+	verifyResult := sm2.Sm2Verify(x.PublicKey, origMsg, uid, sm2Sign.R, sm2Sign.S)
+	if !verifyResult {
+		return false, errors.New("Sm2Verify Result:false")
+	} else {
+		return true, nil
+	}
+}
+
+// 使用私钥进行签名-字节串模式
+func (x *XSm2) Sm2SignString(encodeMode MODE_ENCODE, origMsg string, uid []byte) (string, error) {
+	sig, err := x.Sm2Sign([]byte(origMsg), uid)
+	if err != nil {
+		return "", err
+	}
+	return EncodingToString(encodeMode, sig)
+}
+
+// 使用公钥验证签名-字节串模式
+func (x *XSm2) Sm2VerifyString(encodeMode MODE_ENCODE, origMsg string, uid []byte, sigStr string) (bool, error) {
+	sig, err := DecodingToByte(encodeMode, sigStr)
+	if err != nil {
+		return false, err
+	}
+	return x.Sm2Verify([]byte(origMsg), uid, sig)
 }
 
 func parseSm2Mode(c1c2c3Mode bool) int {
