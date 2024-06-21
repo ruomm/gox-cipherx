@@ -42,6 +42,23 @@ type Sm2Helper interface {
 	FormatPublicKey(modeOfKey MODE_KEY) (string, error)
 	// 格式化私钥
 	FormatPrivateKey(modeOfKey MODE_KEY, pwd []byte) (string, error)
+	// 使用公钥进行SM2加密-字节模式
+	Encrypt(origMsg []byte, c1c2c3Mode bool) ([]byte, error)
+	// 使用私钥进行SM2解密-字节模式
+	Decrypt(encMsg []byte, c1c2c3Mode bool) ([]byte, error)
+	// 使用公钥进行SM2加密-字符串模式
+	EncryptString(encodeMode MODE_ENCODE, origStr string, c1c2c3Mode bool) (string, error)
+	// 使用私钥进行SM2解密-字符串模式
+	DecryptString(encodeMode MODE_ENCODE, encStr string, c1c2c3Mode bool) (string, error)
+
+	// 使用公钥进行SM2加密-字节模式
+	EncryptAsn1(origMsg []byte) ([]byte, error)
+	// 使用私钥进行SM2解密-字节模式
+	DecryptAsn1(encMsg []byte) ([]byte, error)
+	// 使用公钥进行SM2加密-字符串模式
+	EncryptAsn1String(encodeMode MODE_ENCODE, origStr string) (string, error)
+	// 使用私钥进行SM2解密-字符串模式
+	DecryptAsn1String(encodeMode MODE_ENCODE, encStr string) (string, error)
 }
 
 func Sm2KeyStringToByte(keyMode MODE_KEY, keyStr string) ([]byte, error) {

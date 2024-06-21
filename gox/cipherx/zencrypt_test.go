@@ -70,7 +70,7 @@ func TestGuomiSm2Common(t *testing.T) {
 	var PWD []byte = []byte("123456")
 	//var PWD []byte = nil
 	//time, _ := TimeParseByString(TIME_PATTERN_STANDARD, "2023-01-01 00:50:11")
-	var xguomi *XGuomi
+	var xguomi Sm2Helper
 	xguomi = &XGuomi{
 		ModePadding: MODE_PADDING_PKCS5,
 	}
@@ -84,6 +84,19 @@ func TestGuomiSm2Common(t *testing.T) {
 	fmt.Println(err)
 	err = xguomi.LoadPrivateKey(MODE_KEY_BASE64, priKey, PWD)
 	fmt.Println(err)
+	origStr := generateToken(10240) + "      中华人民共和国      "
+	origStr = ""
+	//encStr, _ := xguomi.EncryptString(MODE_ENCODE_BASE64, origStr, true)
+	encStr, _ := xguomi.EncryptAsn1String(MODE_ENCODE_BASE64, origStr)
+	fmt.Println(encStr)
+	//decStr, _ := xguomi.DecryptString(MODE_ENCODE_BASE64, encStr, true)
+	decStr, _ := xguomi.DecryptAsn1String(MODE_ENCODE_BASE64, encStr)
+	fmt.Println(decStr)
+	if origStr == decStr {
+		fmt.Println("加密解密验证通过")
+	} else {
+		fmt.Println("加密解密验证不通过通过")
+	}
 
 }
 

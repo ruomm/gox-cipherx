@@ -8,9 +8,17 @@ package cipherx
 
 import (
 	"crypto/rand"
+	"errors"
 	"github.com/tjfoc/gmsm/x509"
 
 	"github.com/tjfoc/gmsm/sm2"
+)
+
+type SM2_MODE int
+
+const (
+	SM2_C1C3C2 SM2_MODE = 0
+	SM2_C1C2C3 SM2_MODE = 1
 )
 
 type XGuomi struct {
@@ -152,4 +160,102 @@ func (x *XGuomi) FormatPrivateKey(modeOfKey MODE_KEY, pwd []byte) (string, error
 		return "", err
 	}
 	return Sm2KeyByteToString(ParseKeyMode(modeOfKey), keyData, false)
+}
+
+// 使用公钥进行SM2加密-字节模式
+func (x *XGuomi) Encrypt(origMsg []byte, c1c2c3Mode bool) ([]byte, error) {
+	if nil == x.PublicKey {
+		return nil, errors.New("XGuomi.PublicKey is nil")
+	}
+	if nil == origMsg || len(origMsg) <= 0 {
+		return nil, errors.New("origMsg is nil or empty")
+	}
+	sm2_mode := parseSm2Mode(c1c2c3Mode)
+	return sm2.Encrypt(x.PublicKey, origMsg, rand.Reader, sm2_mode)
+}
+
+// 使用私钥进行SM2解密-字节模式
+func (x *XGuomi) Decrypt(encMsg []byte, c1c2c3Mode bool) ([]byte, error) {
+	if nil == x.PrivateKey {
+		return nil, errors.New("XGuomi.PrivateKey is nil")
+	}
+	if nil == encMsg || len(encMsg) <= 0 {
+		return nil, errors.New("encMsg is nil or empty")
+	}
+	sm2_mode := parseSm2Mode(c1c2c3Mode)
+	return sm2.Decrypt(x.PrivateKey, encMsg, sm2_mode)
+}
+
+// 使用公钥进行SM2加密-字节模式
+func (x *XGuomi) EncryptAsn1(origMsg []byte) ([]byte, error) {
+	if nil == x.PublicKey {
+		return nil, errors.New("XGuomi.PublicKey is nil")
+	}
+	if nil == origMsg || len(origMsg) <= 0 {
+		return nil, errors.New("origMsg is nil or empty")
+	}
+	return sm2.EncryptAsn1(x.PublicKey, origMsg, rand.Reader)
+}
+
+// 使用私钥进行SM2解密-字节模式
+func (x *XGuomi) DecryptAsn1(encMsg []byte) ([]byte, error) {
+	if nil == x.PrivateKey {
+		return nil, errors.New("XGuomi.PrivateKey is nil")
+	}
+	if nil == encMsg || len(encMsg) <= 0 {
+		return nil, errors.New("encMsg is nil or empty")
+	}
+	return sm2.DecryptAsn1(x.PrivateKey, encMsg)
+}
+
+// 使用公钥进行SM2加密-字符串模式
+func (x *XGuomi) EncryptString(encodeMode MODE_ENCODE, origStr string, c1c2c3Mode bool) (string, error) {
+	encMsg, err := x.Encrypt([]byte(origStr), c1c2c3Mode)
+	if nil != err {
+		return "", err
+	}
+	return EncodingToString(encodeMode, encMsg)
+}
+
+// 使用私钥进行SM2解密-字符串模式
+func (x *XGuomi) DecryptString(encodeMode MODE_ENCODE, encStr string, c1c2c3Mode bool) (string, error) {
+	encMsg, err := DecodingToByte(encodeMode, encStr)
+	if nil != err {
+		return "", err
+	}
+	decMsg, err := x.Decrypt(encMsg, c1c2c3Mode)
+	if nil != err {
+		return "", err
+	}
+	return string(decMsg), nil
+}
+
+// 使用公钥进行SM2加密-字符串模式
+func (x *XGuomi) EncryptAsn1String(encodeMode MODE_ENCODE, origStr string) (string, error) {
+	encMsg, err := x.EncryptAsn1([]byte(origStr))
+	if nil != err {
+		return "", err
+	}
+	return EncodingToString(encodeMode, encMsg)
+}
+
+// 使用私钥进行SM2解密-字符串模式
+func (x *XGuomi) DecryptAsn1String(encodeMode MODE_ENCODE, encStr string) (string, error) {
+	encMsg, err := DecodingToByte(encodeMode, encStr)
+	if nil != err {
+		return "", err
+	}
+	decMsg, err := x.DecryptAsn1(encMsg)
+	if nil != err {
+		return "", err
+	}
+	return string(decMsg), nil
+}
+
+func parseSm2Mode(c1c2c3Mode bool) int {
+	if c1c2c3Mode {
+		return sm2.C1C2C3
+	} else {
+		return sm2.C1C3C2
+	}
 }
