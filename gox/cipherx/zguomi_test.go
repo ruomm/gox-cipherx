@@ -11,7 +11,51 @@ import (
 	"testing"
 )
 
-func TestShaCommon(t *testing.T) {
+func TestGuomiSm2Common(t *testing.T) {
+	var PWD []byte = []byte("123456")
+	//var PWD []byte = nil
+	//time, _ := TimeParseByString(TIME_PATTERN_STANDARD, "2023-01-01 00:50:11")
+	var xHelper Sm2Helper
+	xHelper = &XSm2{
+		ModePadding: MODE_PADDING_PKCS5,
+	}
+	xHelper.GenrateKeyPair()
+	pubKey, _ := xHelper.FormatPublicKey(MODE_KEY_BASE64)
+	priKey, _ := xHelper.FormatPrivateKey(MODE_KEY_BASE64, PWD)
+
+	fmt.Println(pubKey)
+	fmt.Println(priKey)
+	err := xHelper.LoadPulicKey(MODE_KEY_BASE64, pubKey)
+	fmt.Println(err)
+	err = xHelper.LoadPrivateKey(MODE_KEY_BASE64, priKey, PWD)
+	fmt.Println(err)
+	origStr := generateToken(64) + "      中华人民共和国      "
+	//origStr = "a"
+	//encStr, _ := xHelper.EncryptString(MODE_ENCODE_BASE64, origStr, true)
+	encStr, _ := xHelper.EncryptAsn1String(MODE_ENCODE_BASE64, origStr)
+	fmt.Println(encStr)
+	//decStr, _ := xHelper.DecryptString(MODE_ENCODE_BASE64, encStr, true)
+	decStr, _ := xHelper.DecryptAsn1String(MODE_ENCODE_BASE64, encStr)
+	fmt.Println(decStr)
+	if origStr == decStr {
+		fmt.Println("加密解密验证通过")
+	} else {
+		fmt.Println("加密解密验证不通过通过")
+	}
+	xHelper.SetSignMarshalMode(SIGN_MARSHAL_SR)
+	sigStr, _ := xHelper.Sm2SignString(MODE_ENCODE_HEX_LOWER, origStr, PWD)
+	fmt.Println(sigStr)
+	xHelper.SetSignMarshalMode(SIGN_MARSHAL_SR)
+	_, verifyErr := xHelper.Sm2VerifyString(MODE_ENCODE_HEX_LOWER, origStr, PWD, sigStr)
+	if verifyErr == nil && len(sigStr) > 0 {
+		fmt.Println("签名验证通过")
+	} else {
+		fmt.Printf("签名验证不通过:%v", verifyErr)
+	}
+
+}
+
+func TestSm3Common(t *testing.T) {
 	origFile := "/Users/qx/Downloads/文本bom测试.txt"
 	//encFile := "/Users/qx/Downloads/文本bom测试_ENC.txt"
 	//decFile := "/Users/qx/Downloads/文本bom测试_DEC.txt"
