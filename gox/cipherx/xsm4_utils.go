@@ -1,0 +1,672 @@
+/**
+ * @copyright 像衍科技-idr.ai
+ * @author 牛牛-研发部-www.ruomm.com
+ * @create 2024/1/17 22:01
+ * @version 1.0
+ */
+package cipherx
+
+import (
+	"bufio"
+	"bytes"
+	"crypto/cipher"
+	"errors"
+	"fmt"
+	"github.com/tjfoc/gmsm/sm4"
+	"io"
+	"os"
+)
+
+type XSm4 struct {
+	ModeKey     MODE_KEY
+	ModeEncode  MODE_ENCODE
+	ModePadding MODE_PADDING
+	Key         []byte
+	Iv          []byte
+	AutoFillKey bool // 秘钥自动补充长度，AES自动补充为16、24、32，des自动补充为8、24
+	//KeyLen          int
+	//IvLen           int
+	BlockSize int
+	//BlockSizeByKey  bool
+	PaddingHelper   func(data []byte, blockSize int) []byte
+	UnPaddingHelper func(data []byte, blockSize int) []byte
+}
+
+// key模式
+func (x *XSm4) ModeOfKey() MODE_KEY {
+	return ParseKeyMode(x.ModeKey)
+}
+
+// 字节转字符串编码方案
+func (x *XSm4) ModeOfEncode() MODE_ENCODE {
+	return ParseEncodeMode(x.ModeEncode)
+}
+
+// Padding的模式
+func (x *XSm4) ModeOfPadding() MODE_PADDING {
+	return ParsePaddingMode(x.ModePadding)
+}
+
+// 设置key字节数组
+func (x *XSm4) SetKeyData(key []byte) {
+	x.Key = key
+	//x.KeyLen = len(key)
+}
+
+// 设置iv字节数组
+func (x *XSm4) SetIVData(iv []byte) {
+	x.Iv = iv
+	//x.IvLen = len(iv)
+}
+
+// 设置key字符串
+func (x *XSm4) SetKeyString(keyStr string) error {
+	key, err := x.RestoreKeyIV(keyStr)
+	if err == nil {
+		x.Key = key
+		//x.KeyLen = len(key)
+	}
+	return err
+}
+
+// 获取key字节数组
+func (x *XSm4) GetKeyData() []byte {
+	return x.Key
+}
+
+// 设置iv字节数组
+func (x *XSm4) GetIVData() []byte {
+	return x.Iv
+}
+
+// 获取key字符串
+func (x *XSm4) GetKeyString() (string, error) {
+	return KeyIVByteToString(x.ModeOfKey(), x.Key, fmt.Sprintf("SM4 KEY(len:%d)", len(x.Key)))
+}
+
+// 获取iv字符串
+func (x *XSm4) GetIVString() (string, error) {
+	return KeyIVByteToString(x.ModeOfKey(), x.Iv, fmt.Sprintf("SM4 IV(len:%d)", len(x.Iv)))
+}
+
+// 设置iv字符串
+func (x *XSm4) SetIVString(ivStr string) error {
+	iv, err := x.RestoreKeyIV(ivStr)
+	if err == nil {
+		x.Iv = iv
+		//x.IvLen = len(iv)
+	}
+	return err
+}
+
+// 设置Blocksize
+func (x *XSm4) SetBlockSize(blockSize int) {
+	if blockSize > 0 && blockSize%8 == 0 {
+		x.BlockSize = blockSize
+	}
+}
+
+// 获取Blocksize
+func (x *XSm4) GetBlockSize() (int, error) {
+	if x.BlockSize > 0 && x.BlockSize%8 == 0 {
+		return x.BlockSize, nil
+	} else {
+		block, err := x.genrateNewChiper()
+		if err != nil {
+			return 16, err
+		}
+		sizeByChiper := block.BlockSize()
+		if sizeByChiper > 0 && sizeByChiper%8 == 0 {
+			return sizeByChiper, nil
+		} else {
+			return 16, errors.New("SM4 Cipher block size err")
+		}
+	}
+}
+
+// 生成key或iv字节数组
+func (x *XSm4) GenKeyIvData(len int) ([]byte, error) {
+	return GenKeyData(len), nil
+}
+
+// 生成key或iv字符串
+func (x *XSm4) GenKeyIvString(len int) (string, error) {
+	tag := fmt.Sprintf("SM4 KEY(len:%d)", len)
+	return GenKeyString(x.ModeOfKey(), len, tag)
+}
+
+// 生成iv字符串
+func (x *XSm4) GenIVString() (string, error) {
+	tag := fmt.Sprintf("SM4 IV(len:%d)", 16)
+	return GenKeyString(x.ModeOfKey(), 16, tag)
+}
+
+// 还原key或iv字符串为key或iv字节数组
+func (x *XSm4) RestoreKeyIV(keyStr string) ([]byte, error) {
+	return KeyIVStringToByte(x.ModeOfKey(), keyStr)
+}
+
+// 设置秘钥自动补充长度，AES自动补充为16、24、32，des自动补充为8、24
+func (x *XSm4) SetAutoFillKey(autoFillKey bool) {
+	x.AutoFillKey = autoFillKey
+}
+
+// ECB加密字节数组
+func (x *XSm4) EncDataECB(data []byte) ([]byte, error) {
+	// 创建新的SM4 cipher对象
+	block, err := x.genrateNewChiper()
+	if err != nil {
+		return nil, err
+	}
+	// 补齐明文长度为blockSize字节（SM4 block size）的倍数
+	blockSize := x.calBlockSize(block.BlockSize())
+	ecbBlockSize := block.BlockSize()
+	plaintext := x.Padding(data, blockSize)
+	// 加密
+	crypted := make([]byte, len(plaintext))
+	// 分组分块加密
+	for bs := 0; bs < len(plaintext); bs = bs + ecbBlockSize {
+		block.Encrypt(crypted[bs:bs+ecbBlockSize], plaintext[bs:bs+ecbBlockSize])
+	}
+	// IV + Encrypted Data
+	return crypted, nil
+}
+
+// CBC加密字节数组
+func (x *XSm4) EncDataCBC(data []byte) ([]byte, error) {
+	// 创建新的SM4 cipher对象
+	block, err := x.genrateNewChiper()
+	if err != nil {
+		return nil, err
+	}
+	// 补齐明文长度为blockSize字节（SM4 block size）的倍数
+	blockSize := x.calBlockSize(block.BlockSize())
+	plaintext := x.Padding(data, blockSize)
+	// 加密
+	blockMode := cipher.NewCBCEncrypter(block, x.Iv)
+	crypted := make([]byte, len(plaintext))
+	blockMode.CryptBlocks(crypted, plaintext)
+	// IV + Encrypted Data
+	return crypted, nil
+}
+
+// ECB解密字节数组
+func (x *XSm4) DecDataECB(dataEnc []byte) ([]byte, error) {
+	// 创建新的SM4 cipher对象
+	block, err := x.genrateNewChiper()
+	if err != nil {
+		return nil, err
+	}
+	blockSize := x.calBlockSize(block.BlockSize())
+	ecbBlockSize := block.BlockSize()
+	// 解密
+	decrypted := make([]byte, len(dataEnc))
+	block.Decrypt(decrypted, dataEnc)
+	// 分组分块解密
+	for bs := 0; bs < len(dataEnc); bs = bs + ecbBlockSize {
+		block.Decrypt(decrypted[bs:bs+ecbBlockSize], dataEnc[bs:bs+ecbBlockSize])
+	}
+	unpaddingText := x.UnPadding(decrypted, blockSize)
+	// 返回去除padding的数据
+	return unpaddingText, nil
+}
+
+// CBC解密字节数组
+func (x *XSm4) DecDataCBC(dataEnc []byte) ([]byte, error) {
+	// 创建新的SM4 cipher对象
+	block, err := x.genrateNewChiper()
+	if err != nil {
+		return nil, err
+	}
+	blockSize := x.calBlockSize(block.BlockSize())
+	// 解密
+	decrypted := make([]byte, len(dataEnc))
+	blockMode := cipher.NewCBCDecrypter(block, x.Iv)
+	blockMode.CryptBlocks(decrypted, dataEnc)
+	unpaddingText := x.UnPadding(decrypted, blockSize)
+	// 返回去除padding的数据
+	return unpaddingText, nil
+}
+
+// ECB加密字符串
+func (x *XSm4) EncStringECB(str string) (string, error) {
+	crypted, err := x.EncDataECB([]byte(str))
+	if err != nil {
+		return "", err
+	}
+	return EncodingToString(x.ModeOfEncode(), crypted)
+}
+
+// CBC加密字符串
+func (x *XSm4) EncStringCBC(str string) (string, error) {
+	crypted, err := x.EncDataCBC([]byte(str))
+	if err != nil {
+		return "", err
+	}
+	return EncodingToString(x.ModeOfEncode(), crypted)
+}
+
+// ECB解密字符串
+func (x *XSm4) DecStringECB(strEnc string) (string, error) {
+	dataEnc, err := DecodingToByte(x.ModeOfEncode(), strEnc)
+	if err != nil {
+		return "", err
+	}
+	decrypted, err := x.DecDataECB(dataEnc)
+	if err != nil {
+		return "", err
+	}
+	return string(decrypted), nil
+}
+
+// CBC解密字符串
+func (x *XSm4) DecStringCBC(strEnc string) (string, error) {
+	dataEnc, err := DecodingToByte(x.ModeOfEncode(), strEnc)
+	if err != nil {
+		return "", err
+	}
+	decrypted, err := x.DecDataCBC(dataEnc)
+	if err != nil {
+		return "", err
+	}
+	return string(decrypted), nil
+}
+
+// ECB加密字符串
+func (x *XSm4) EncFileECB(pathSrc string, pathEnc string) error {
+	// 打开读写文件
+	fiR, errOpenR := os.Open(pathSrc)
+	if errOpenR != nil {
+		fmt.Println("open file error: ", errOpenR)
+		return errOpenR
+	}
+	defer fiR.Close()
+	fiW, errOpenW := os.OpenFile(pathEnc, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0664)
+	if errOpenW != nil {
+		fmt.Println("open file error: ", errOpenW)
+		return errOpenW
+	}
+	defer fiW.Close()
+	// 创建新的SM4 cipher对象
+	block, err := x.genrateNewChiper()
+	if err != nil {
+		return err
+	}
+	// 补齐明文长度为blockSize字节（SM4 block size）的倍数
+	blockSize := x.calBlockSize(block.BlockSize())
+	ecbBlockSize := block.BlockSize()
+	bufferSize := (FILE_BUFFER_SIZE / blockSize) * blockSize
+	if bufferSize < 2*blockSize {
+		bufferSize = 2 * blockSize
+	}
+	// 开始文件加密
+	reader := bufio.NewReader(fiR)
+	writer := bufio.NewWriter(fiW)
+	var bRead = make([]byte, bufferSize)
+	//hasRead := false
+	for {
+		nR, errR := reader.Read(bRead)
+		if errR != nil && errR != io.EOF {
+			return errR
+		}
+		if nR == 0 {
+			plaintext := x.Padding([]byte{}, blockSize)
+			// 加密
+			crypted := make([]byte, len(plaintext))
+			// 分组分块加密
+			for bs := 0; bs < len(plaintext); bs = bs + ecbBlockSize {
+				block.Encrypt(crypted[bs:bs+ecbBlockSize], plaintext[bs:bs+ecbBlockSize])
+			}
+			_, errW := writer.Write(crypted)
+			if errW != nil {
+				return errW
+			}
+			break
+		}
+		if nR < bufferSize {
+			plaintext := x.Padding(bRead[0:nR], blockSize)
+			// 加密
+			crypted := make([]byte, len(plaintext))
+			// 分组分块加密
+			for bs := 0; bs < len(plaintext); bs = bs + ecbBlockSize {
+				block.Encrypt(crypted[bs:bs+ecbBlockSize], plaintext[bs:bs+ecbBlockSize])
+			}
+			_, errW := writer.Write(crypted)
+			if errW != nil {
+				return errW
+			}
+			break
+		} else {
+			// 加密
+			crypted := make([]byte, bufferSize)
+			// 分组分块加密
+			for bs := 0; bs < len(bRead); bs = bs + ecbBlockSize {
+				block.Encrypt(crypted[bs:bs+ecbBlockSize], bRead[bs:bs+ecbBlockSize])
+			}
+			_, errW := writer.Write(crypted)
+			if errW != nil {
+				return errW
+			}
+		}
+
+	}
+	// 清空缓冲区，进行缓冲区内容落到磁盘
+	errFlush := writer.Flush()
+	if errFlush != nil {
+		return errFlush
+	}
+	return nil
+}
+
+// CBC加密字符串
+func (x *XSm4) EncFileCBC(pathSrc string, pathEnc string) error {
+	// 打开读写文件
+	fiR, errOpenR := os.Open(pathSrc)
+	if errOpenR != nil {
+		fmt.Println("open file error: ", errOpenR)
+		return errOpenR
+	}
+	defer fiR.Close()
+	fiW, errOpenW := os.OpenFile(pathEnc, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0664)
+	if errOpenW != nil {
+		fmt.Println("open file error: ", errOpenW)
+		return errOpenW
+	}
+	defer fiW.Close()
+	// 创建新的SM4 cipher对象
+	block, err := x.genrateNewChiper()
+	if err != nil {
+		return err
+	}
+	// 补齐明文长度为blockSize字节（SM4 block size）的倍数
+	blockSize := x.calBlockSize(block.BlockSize())
+	blockMode := cipher.NewCBCEncrypter(block, x.Iv)
+	bufferSize := (FILE_BUFFER_SIZE / blockSize) * blockSize
+	if bufferSize < 2*blockSize {
+		bufferSize = 2 * blockSize
+	}
+	// 开始文件加密
+	reader := bufio.NewReader(fiR)
+	writer := bufio.NewWriter(fiW)
+	var bRead = make([]byte, bufferSize)
+	//hasRead := false
+	for {
+		nR, errR := reader.Read(bRead)
+		if errR != nil && errR != io.EOF {
+			return errR
+		}
+		if nR == 0 {
+			plaintext := x.Padding([]byte{}, blockSize)
+			// 加密
+			crypted := make([]byte, len(plaintext))
+			blockMode.CryptBlocks(crypted, plaintext)
+			_, errW := writer.Write(crypted)
+			if errW != nil {
+				return errW
+			}
+			break
+		}
+		if nR < bufferSize {
+			plaintext := x.Padding(bRead[0:nR], blockSize)
+			// 加密
+			crypted := make([]byte, len(plaintext))
+			blockMode.CryptBlocks(crypted, plaintext)
+			_, errW := writer.Write(crypted)
+			if errW != nil {
+				return errW
+			}
+			break
+		} else {
+			// 加密
+			crypted := make([]byte, bufferSize)
+			blockMode.CryptBlocks(crypted, bRead)
+			_, errW := writer.Write(crypted)
+			if errW != nil {
+				return errW
+			}
+		}
+
+	}
+	// 清空缓冲区，进行缓冲区内容落到磁盘
+	errFlush := writer.Flush()
+	if errFlush != nil {
+		return errFlush
+	}
+	return nil
+}
+
+// ECB解密字符串
+func (x *XSm4) DecFileECB(pathEnc string, pathDest string) error {
+	// 打开读写文件
+	fiR, errOpenR := os.Open(pathEnc)
+	if errOpenR != nil {
+		fmt.Println("open file error: ", errOpenR)
+		return errOpenR
+	}
+	defer fiR.Close()
+	fiW, errOpenW := os.OpenFile(pathDest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0664)
+	if errOpenW != nil {
+		fmt.Println("open file error: ", errOpenW)
+		return errOpenW
+	}
+	defer fiW.Close()
+	// 创建新的SM4 cipher对象
+	block, err := x.genrateNewChiper()
+	if err != nil {
+		return err
+	}
+	// 补齐明文长度为blockSize字节（SM4 block size）的倍数
+	blockSize := x.calBlockSize(block.BlockSize())
+	ecbBlockSize := block.BlockSize()
+	bufferSize := (FILE_BUFFER_SIZE / blockSize) * blockSize
+	if bufferSize < 2*blockSize {
+		bufferSize = 2 * blockSize
+	}
+	// 开始文件解密
+	reader := bufio.NewReader(fiR)
+	writer := bufio.NewWriter(fiW)
+	var bRead = make([]byte, bufferSize)
+	var preBuffer []byte = nil
+	for {
+		nR, errR := reader.Read(bRead)
+		if errR != nil && errR != io.EOF {
+			return errR
+		}
+		if nR > 0 {
+			if nil != preBuffer && len(preBuffer) > 0 {
+				//解密上一次数据并写入
+				// 解密
+				decrypted := make([]byte, len(preBuffer))
+				// 分组分块解密
+				for bs := 0; bs < len(preBuffer); bs = bs + ecbBlockSize {
+					block.Decrypt(decrypted[bs:bs+ecbBlockSize], preBuffer[bs:bs+ecbBlockSize])
+				}
+				_, errW := writer.Write(decrypted)
+				if errW != nil {
+					return errW
+				}
+			}
+			preBuffer = make([]byte, nR)
+			copy(preBuffer, bRead[0:nR])
+		}
+		if nR < bufferSize {
+			break
+		}
+
+	}
+	if nil != preBuffer && len(preBuffer) > 0 {
+		//解密上一次数据并写入
+		// 解密
+		decrypted := make([]byte, len(preBuffer))
+		// 分组分块解密
+		for bs := 0; bs < len(preBuffer); bs = bs + ecbBlockSize {
+			block.Decrypt(decrypted[bs:bs+ecbBlockSize], preBuffer[bs:bs+ecbBlockSize])
+		}
+		plaintText := x.UnPadding(decrypted, blockSize)
+		if len(plaintText) > 0 {
+			_, errW := writer.Write(plaintText)
+			if errW != nil {
+				return errW
+			}
+		}
+
+	}
+	// 清空缓冲区，进行缓冲区内容落到磁盘
+	errFlush := writer.Flush()
+	if errFlush != nil {
+		return errFlush
+	}
+	return nil
+}
+
+// CBC解密字符串
+func (x *XSm4) DecFileCBC(pathEnc string, pathDest string) error {
+	// 打开读写文件
+	fiR, errOpenR := os.Open(pathEnc)
+	if errOpenR != nil {
+		fmt.Println("open file error: ", errOpenR)
+		return errOpenR
+	}
+	defer fiR.Close()
+	fiW, errOpenW := os.OpenFile(pathDest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0664)
+	if errOpenW != nil {
+		fmt.Println("open file error: ", errOpenW)
+		return errOpenW
+	}
+	defer fiW.Close()
+	// 创建新的SM4 cipher对象
+	block, err := x.genrateNewChiper()
+	if err != nil {
+		return err
+	}
+	// 补齐明文长度为blockSize字节（SM4 block size）的倍数
+	blockSize := x.calBlockSize(block.BlockSize())
+	blockMode := cipher.NewCBCDecrypter(block, x.Iv)
+	bufferSize := (FILE_BUFFER_SIZE / blockSize) * blockSize
+	if bufferSize < 2*blockSize {
+		bufferSize = 2 * blockSize
+	}
+	// 开始文件解密
+	reader := bufio.NewReader(fiR)
+	writer := bufio.NewWriter(fiW)
+	var bRead = make([]byte, bufferSize)
+	var preBuffer []byte = nil
+	for {
+		nR, errR := reader.Read(bRead)
+		if errR != nil && errR != io.EOF {
+			return errR
+		}
+		if nR > 0 {
+			if nil != preBuffer && len(preBuffer) > 0 {
+				//解密上一次数据并写入
+				// 解密
+				decrypted := make([]byte, len(preBuffer))
+				// 分组分块解密
+				blockMode.CryptBlocks(decrypted, preBuffer)
+				_, errW := writer.Write(decrypted)
+				if errW != nil {
+					return errW
+				}
+			}
+			preBuffer = make([]byte, nR)
+			copy(preBuffer, bRead[0:nR])
+		}
+		if nR < bufferSize {
+			break
+		}
+
+	}
+	if nil != preBuffer && len(preBuffer) > 0 {
+		//解密上一次数据并写入
+		// 解密
+		decrypted := make([]byte, len(preBuffer))
+		blockMode.CryptBlocks(decrypted, preBuffer)
+		plaintText := x.UnPadding(decrypted, blockSize)
+		if len(plaintText) > 0 {
+			_, errW := writer.Write(plaintText)
+			if errW != nil {
+				return errW
+			}
+		}
+
+	}
+	// 清空缓冲区，进行缓冲区内容落到磁盘
+	errFlush := writer.Flush()
+	if errFlush != nil {
+		return errFlush
+	}
+	return nil
+}
+
+// Padding&UnPadding
+func (x *XSm4) Padding(data []byte, blockSize int) []byte {
+	if nil != x.PaddingHelper {
+		return x.Padding(data, blockSize)
+	}
+	modeOfPadding := x.ModeOfPadding()
+	if modeOfPadding == MODE_PADDING_PKCS7 {
+		return Pkcs7Padding(data, blockSize)
+	} else if modeOfPadding == MODE_PADDING_PKCS5 {
+		return Pkcs5Padding(data, blockSize)
+	} else {
+		return Pkcs7Padding(data, blockSize)
+	}
+}
+func (x *XSm4) UnPadding(data []byte, blockSize int) []byte {
+	if len(data) <= 0 {
+		return data
+	}
+	if nil != x.UnPaddingHelper {
+		return x.UnPaddingHelper(data, blockSize)
+	}
+	modeOfPadding := x.ModeOfPadding()
+	if modeOfPadding == MODE_PADDING_PKCS7 {
+		return Pkcs7UnPadding(data)
+	} else if modeOfPadding == MODE_PADDING_PKCS5 {
+		return Pkcs5UnPadding(data)
+	} else {
+		return Pkcs7UnPadding(data)
+	}
+}
+
+func (x *XSm4) genrateNewChiper() (cipher.Block, error) {
+	lenKey := len(x.Key)
+	if lenKey <= 0 {
+		return nil, errors.New("SM4 key for cipher is error")
+	}
+	if x.AutoFillKey {
+		if lenKey < 16 {
+			byteBuffer := bytes.Buffer{}
+			for i := 0; i < 16; i++ {
+				byteBuffer.WriteByte(x.Key[i%lenKey])
+			}
+			sm4Key := byteBuffer.Bytes()
+			return sm4.NewCipher(sm4Key)
+		} else if lenKey == 16 {
+			return sm4.NewCipher(x.Key)
+		} else if lenKey < 32 {
+			byteBuffer := bytes.Buffer{}
+			for i := 0; i < 32; i++ {
+				byteBuffer.WriteByte(x.Key[i%lenKey])
+			}
+			sm4Key := byteBuffer.Bytes()
+			return sm4.NewCipher(sm4Key)
+		} else if lenKey == 32 {
+			return sm4.NewCipher(x.Key)
+		} else {
+			return sm4.NewCipher(x.Key[0:32])
+		}
+	} else {
+		return sm4.NewCipher(x.Key)
+	}
+
+}
+func (x *XSm4) calBlockSize(sizeByChiper int) int {
+	if x.BlockSize > 0 && x.BlockSize%8 == 0 {
+		return x.BlockSize
+	} else if sizeByChiper > 0 && sizeByChiper%8 == 0 {
+		return sizeByChiper
+	} else {
+		return 16
+	}
+}
