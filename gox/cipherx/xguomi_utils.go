@@ -28,6 +28,7 @@ type XSm2 struct {
 	SizeAuto        bool
 	PublicKey       *sm2.PublicKey
 	PrivateKey      *sm2.PrivateKey
+	SignMarshalMode SIGN_MARSHAL_MODE
 	PaddingHelper   func(data []byte, blockSize int) []byte
 	UnPaddingHelper func(data []byte, blockSize int) []byte
 }
@@ -163,6 +164,11 @@ func (x *XSm2) FormatPrivateKey(modeOfKey MODE_KEY, pwd []byte) (string, error) 
 	return Sm2KeyByteToString(ParseKeyMode(modeOfKey), keyData, false)
 }
 
+// 设置签名数据格式化方式，ASN1、RS、SR
+func (x *XSm2) SetSignMarshalMode(signMarshalMode SIGN_MARSHAL_MODE) {
+	x.SignMarshalMode = signMarshalMode
+}
+
 // 使用公钥进行SM2加密-字节模式
 func (x *XSm2) Encrypt(origMsg []byte, c1c2c3Mode bool) ([]byte, error) {
 	if nil == x.PublicKey {
@@ -265,7 +271,7 @@ func (x *XSm2) Sm2Sign(origMsg []byte, uid []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return asn1.Marshal(sm2Signature{r, s})
+	return marshalSm2Sign(x.SignMarshalMode, sm2Signature{r, s})
 }
 
 // 使用公钥验证签名-字节数组模式
@@ -276,8 +282,7 @@ func (x *XSm2) Sm2Verify(origMsg []byte, uid []byte, sign []byte) (bool, error) 
 	if nil == origMsg || len(origMsg) <= 0 {
 		return false, errors.New("origMsg is nil or empty")
 	}
-	var sm2Sign sm2Signature
-	_, err := asn1.Unmarshal(sign, &sm2Sign)
+	sm2Sign, err := unmarshalSm2Sign(x.SignMarshalMode, sign)
 	if err != nil {
 		return false, err
 	}
@@ -305,6 +310,67 @@ func (x *XSm2) Sm2VerifyString(encodeMode MODE_ENCODE, origMsg string, uid []byt
 		return false, err
 	}
 	return x.Sm2Verify([]byte(origMsg), uid, sig)
+}
+
+// 国密签名RS转换为byte数据
+func marshalSm2Sign(signMarshalMode SIGN_MARSHAL_MODE, signature sm2Signature) ([]byte, error) {
+	if signMarshalMode == SIGN_MARSHAL_RS {
+		rBuf := FormatBigInt(signature.R)
+		sBuf := FormatBigInt(signature.S)
+		return append(rBuf, sBuf...), nil
+	} else if signMarshalMode == SIGN_MARSHAL_SR {
+		rBuf := FormatBigInt(signature.R)
+		sBuf := FormatBigInt(signature.S)
+		return append(sBuf, rBuf...), nil
+	} else {
+		return asn1.Marshal(signature)
+	}
+
+}
+
+// 国密签名byte数据转换为RS
+func unmarshalSm2Sign(signMarshalMode SIGN_MARSHAL_MODE, sig []byte) (*sm2Signature, error) {
+	if sig == nil || len(sig) < 64 {
+		return nil, errors.New("SM2 sign result error，sig data length must be equal or greater than 64")
+	}
+	if signMarshalMode == SIGN_MARSHAL_RS {
+		r, err := ParseBigInt(sig[0:32])
+		if err != nil {
+			return nil, err
+		}
+		s, err := ParseBigInt(sig[32:64])
+		if err != nil {
+			return nil, err
+		}
+		sm2Sign := sm2Signature{
+			R: r,
+			S: s,
+		}
+		return &sm2Sign, nil
+
+	} else if signMarshalMode == SIGN_MARSHAL_SR {
+		r, err := ParseBigInt(sig[32:64])
+		if err != nil {
+			return nil, err
+		}
+		s, err := ParseBigInt(sig[0:32])
+		if err != nil {
+			return nil, err
+		}
+		sm2Sign := sm2Signature{
+			R: r,
+			S: s,
+		}
+		return &sm2Sign, nil
+	} else {
+		var sm2Sign sm2Signature
+		_, err := asn1.Unmarshal(sig, &sm2Sign)
+		if err != nil {
+			return nil, err
+		} else {
+			return &sm2Sign, nil
+		}
+	}
 }
 
 func parseSm2Mode(c1c2c3Mode bool) int {

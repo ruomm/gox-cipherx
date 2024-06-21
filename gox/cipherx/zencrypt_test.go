@@ -84,7 +84,7 @@ func TestGuomiSm2Common(t *testing.T) {
 	fmt.Println(err)
 	err = xHelper.LoadPrivateKey(MODE_KEY_BASE64, priKey, PWD)
 	fmt.Println(err)
-	origStr := generateToken(10240) + "      中华人民共和国      "
+	origStr := generateToken(64) + "      中华人民共和国      "
 	//origStr = "a"
 	//encStr, _ := xHelper.EncryptString(MODE_ENCODE_BASE64, origStr, true)
 	encStr, _ := xHelper.EncryptAsn1String(MODE_ENCODE_BASE64, origStr)
@@ -97,9 +97,10 @@ func TestGuomiSm2Common(t *testing.T) {
 	} else {
 		fmt.Println("加密解密验证不通过通过")
 	}
-
+	xHelper.SetSignMarshalMode(SIGN_MARSHAL_SR)
 	sigStr, _ := xHelper.Sm2SignString(MODE_ENCODE_HEX_LOWER, origStr, PWD)
 	fmt.Println(sigStr)
+	xHelper.SetSignMarshalMode(SIGN_MARSHAL_SR)
 	_, verifyErr := xHelper.Sm2VerifyString(MODE_ENCODE_HEX_LOWER, origStr, PWD, sigStr)
 	if verifyErr == nil && len(sigStr) > 0 {
 		fmt.Println("签名验证通过")

@@ -7,12 +7,22 @@
 package cipherx
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"github.com/tjfoc/gmsm/sm2"
+	"math/big"
 	"strings"
+)
+
+type SIGN_MARSHAL_MODE int
+
+const (
+	SIGN_MARSHAL_ASN1 SIGN_MARSHAL_MODE = 0
+	SIGN_MARSHAL_RS   SIGN_MARSHAL_MODE = 1
+	SIGN_MARSHAL_SR   SIGN_MARSHAL_MODE = 2
 )
 
 type Sm2Helper interface {
@@ -42,6 +52,8 @@ type Sm2Helper interface {
 	FormatPublicKey(modeOfKey MODE_KEY) (string, error)
 	// 格式化私钥
 	FormatPrivateKey(modeOfKey MODE_KEY, pwd []byte) (string, error)
+	// 设置签名数据格式化方式，ASN1、RS、SR
+	SetSignMarshalMode(signMarshalMode SIGN_MARSHAL_MODE)
 	// 使用公钥进行SM2加密-字节模式
 	Encrypt(origMsg []byte, c1c2c3Mode bool) ([]byte, error)
 	// 使用私钥进行SM2解密-字节模式
@@ -124,4 +136,30 @@ func Sm2KeyByteToString(keyMode MODE_KEY, keyData []byte, public bool) (string, 
 		}
 		return FormatKeyByData(keyData, tag)
 	}
+}
+
+func FormatBigInt(bi *big.Int) []byte {
+	iBytes := bi.Bytes()
+	buffer := bytes.Buffer{}
+	lenOffset := 32 - len(iBytes)
+	for i := 0; i < lenOffset; i++ {
+		buffer.WriteByte(0)
+	}
+	buffer.Write(iBytes)
+	return buffer.Bytes()
+}
+
+func ParseBigInt(iBytes []byte) (*big.Int, error) {
+
+	lenByte := len(iBytes)
+	if lenByte <= 0 {
+		return nil, errors.New("ByteToBigInt err,byte data is empty")
+	}
+	var x *big.Int = nil
+	if lenByte <= 32 {
+		x = new(big.Int).SetBytes(iBytes)
+	} else {
+		x = new(big.Int).SetBytes(iBytes[0:32])
+	}
+	return x, nil
 }
