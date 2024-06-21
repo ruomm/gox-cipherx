@@ -71,7 +71,7 @@ func TestGuomiSm2Common(t *testing.T) {
 	//var PWD []byte = nil
 	//time, _ := TimeParseByString(TIME_PATTERN_STANDARD, "2023-01-01 00:50:11")
 	var xHelper Sm2Helper
-	xHelper = &XGuomi{
+	xHelper = &XSm2{
 		ModePadding: MODE_PADDING_PKCS5,
 	}
 	xHelper.GenrateKeyPair()
