@@ -66,6 +66,27 @@ func TestRsaHelperCommon(t *testing.T) {
 	}
 }
 
+func TestGuomiSm2Common(t *testing.T) {
+	var PWD []byte = []byte("123456")
+	//var PWD []byte = nil
+	//time, _ := TimeParseByString(TIME_PATTERN_STANDARD, "2023-01-01 00:50:11")
+	var xguomi *XGuomi
+	xguomi = &XGuomi{
+		ModePadding: MODE_PADDING_PKCS5,
+	}
+	xguomi.GenrateKeyPair()
+	pubKey, _ := xguomi.FormatPublicKey(MODE_KEY_BASE64)
+	priKey, _ := xguomi.FormatPrivateKey(MODE_KEY_BASE64, PWD)
+
+	fmt.Println(pubKey)
+	fmt.Println(priKey)
+	err := xguomi.LoadPulicKey(MODE_KEY_BASE64, pubKey)
+	fmt.Println(err)
+	err = xguomi.LoadPrivateKey(MODE_KEY_BASE64, priKey, PWD)
+	fmt.Println(err)
+
+}
+
 func TestRsaHelperFile(t *testing.T) {
 
 	//time, _ := TimeParseByString(TIME_PATTERN_STANDARD, "2023-01-01 00:50:11")
